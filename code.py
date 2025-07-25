@@ -108,11 +108,11 @@ def main():
 
     # Configure synthio patch to generate audio
     vca = synthio.Envelope(
-        attack_time=0.001, decay_time=0.01, sustain_level=0.6,
-        release_time=0, attack_level=0.8
+        attack_time=0.001, decay_time=0.01, sustain_level=0.4,
+        release_time=0, attack_level=0.6
     )
     synth = synthio.Synthesizer(
-        sample_rate=SAMPLE_RATE, channel_count=1, envelope=vca
+        sample_rate=SAMPLE_RATE, channel_count=CHAN_COUNT, envelope=vca
     )
     audio.play(synth)
 
@@ -196,7 +196,7 @@ def main():
                 elif cin == 0x0a:
                     # Polyphonic key pressure (aftertouch)
                     continue  # Ignore PP
-                    #fast_wr('PP  %d %d %d\n' % (chan, num, val))
+                    fast_wr('PP  %d %d %d\n' % (chan, num, val))
                 elif cin == 0x0b:
                     # CC (control change)
                     if num == 123 and val == 0:
@@ -211,7 +211,8 @@ def main():
                     #fast_wr('CP  %d %d\n' % (chan, num))
                 elif cin == 0x0e:
                     # Pitch bend
-                    fast_wr('PB  %d %d %d\n' % (chan, num, val))
+                    continue  # Ignore PB
+                    #fast_wr('PB  %d %d %d\n' % (chan, num, val))
                 else:
                     # Ignore other messages: SysEx or whatever
                     pass
