@@ -153,6 +153,7 @@ def main():
                 # midi port the message arrived from. Ignoring the cable number
                 # lets us lets us merge all the midi input streams to filter
                 # more efficiently.
+                #
                 if data is None:
                     continue
                 cin = data[0] & 0x0f
@@ -161,10 +162,17 @@ def main():
                 # commonly sends start/stop messages along with _many_ timing
                 # clocks. Dropping real-time messages conserves CPU to spend on
                 # handling note and cc messages.
+                #
                 if cin == 0x0f and (0xf8 <= data[1] <= 0xff):
                     continue
 
-                # Handle notes, cc, aftertouch, pitchbend, etc.
+                # This decodes MIDI events by comparing constants against bytes
+                # from a memoryview. Doing it this way avoids many extra heap
+                # allocations and dictionary lookups that would happen in OOP
+                # style code with many class propery and method references. The
+                # code may be harder to read like this, but in exchange we get
+                # lower latency and fewer audio glitches.
+                #
                 (chan, num, val) = ((data[1] & 0x0f) + 1, data[2], data[3])
                 if cin == 0x08:
                     # Note off
@@ -183,7 +191,11 @@ def main():
                     fast_wr('PP  %d %d %d\n' % (chan, num, val))
                 elif cin == 0x0b:
                     # CC (control change)
-                    fast_wr('CC  %d %d %d\n' % (chan, num, val))
+                    if num == 123 and val == 0:
+                        # CC 123 = 0 means stop all notes ("all stop", "panic")
+                        fast_wr('PANIC %d %d %d\n' % (chan, num, val))
+                    else:
+                        fast_wr('CC  %d %d %d\n' % (chan, num, val))
                 elif cin == 0x0d:
                     # Channel key pressure (aftertouch)
                     if cp_skip > 0:
