@@ -4,12 +4,14 @@
 # Related Docs:
 # - https://docs.circuitpython.org/projects/tlv320/en/latest/api.html
 # - https://learn.adafruit.com/adafruit-tlv320dac3100-i2s-dac/overview
+# - https://docs.circuitpython.org/en/latest/docs/environment.html
 #
 from board import BUTTON1, BUTTON2, BUTTON3
 from digitalio import DigitalInOut, Direction, Pull
 import displayio
 import gc
 from micropython import const
+import os
 import supervisor
 import sys
 from time import sleep
@@ -24,7 +26,22 @@ def main():
     displayio.release_displays()
     gc.collect()
 
-    # Configure TLV320DAC3100 I2S DAC for Audio Output
+    # Configure TLV320DAC3100 I2S DAC for Audio Output.
+    #
+    # CAUTION: The I2S pinout changed between Fruit Jam board revision B and
+    # revision C. CircuitPython 10.0.0-alpha.6 defines board.I2S_BLCK and
+    # board.I2S_MCLK using the rev B pinout. As of 10.0.0-alpha.7, the pin
+    # definitions use the new rev C pinout. Since I'm developing this on a
+    # rev B board, the code checks an environment variable to allow for
+    # swapping the pins. IF YOU HAVE A REV C OR LATER BOARD, YOU CAN IGNORE
+    # THIS. But, if you have a rev B board, you need to add
+    # `FRUIT_JAM_BOARD_REV = "B"` in your CIRCUITPY/settings.toml file.
+    #
+    if os.getenv("FRUIT_JAM_BOARD_REV") == "B":
+        print("USING FRUIT JAM REV B BOARD: SWAPPING I2S PINS!")
+    else:
+        print("Using default I2S pin definitions (not a rev B board)")
+
     print("TODO: CONFIGURE TLV320DAC3100 I2S DAC")
 
     # Configure synthio patch to generate audio
