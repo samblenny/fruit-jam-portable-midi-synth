@@ -6,17 +6,18 @@
 # - https://learn.adafruit.com/adafruit-tlv320dac3100-i2s-dac/overview
 # - https://docs.circuitpython.org/en/latest/docs/environment.html
 # - https://docs.circuitpython.org/en/latest/shared-bindings/audiobusio/
+# - https://docs.circuitpython.org/en/latest/shared-bindings/audiomixer/
 #
 from audiobusio import I2SOut
 from board import (
-    BUTTON1, BUTTON2, BUTTON3, I2C, I2S_BCLK, I2S_DIN, I2S_WS, PERIPH_RESET
+    I2C, I2S_BCLK, I2S_DIN, I2S_MCLK, I2S_WS, PERIPH_RESET
 )
 from digitalio import DigitalInOut, Direction, Pull
 import displayio
 import gc
 from micropython import const
 import os
-import supervisor
+import synthio
 import sys
 from time import sleep
 from usb.core import USBError, USBTimeoutError
@@ -26,6 +27,17 @@ from adafruit_tlv320 import TLV320DAC3100
 
 from sb_usb_midi import find_usb_device, MIDIInputDevice
 
+
+# DAC and Synthesis parameters
+SAMPLE_RATE = const(11025)
+CHAN_COUNT  = const(2)
+BUFFER_SIZE = const(1024)
+#=============================================================
+# DANGER!!! Set this to False if you want to use heaphones!!!
+# When this is True, the headphone jack will send a line-level
+# output suitable use with a mixer or powered speakers.
+LINE_LEVEL  = const(True)
+#=============================================================
 
 def main():
     # Turn off the default DVI display to free up CPU
@@ -39,64 +51,87 @@ def main():
     # 10.0.0-alpha.6 and 10.0.0-alpha.7 releases (see commit 9dd53eb).
     #
     # Table of old and new I2S pins definitions:
-    #   | I2S Signal | Rev B Pin | Rev C Pin         |
-    #   | ---------- | --------- | ----------------- |
-    #   | I2S_MCLK   | GPIO27    | GPIO25 (old WS)   |
-    #   | I2S_BCLK   | GPIO26    | GPIO26 (same)     |
-    #   | I2S_WS     | GPIO25    | GPIO27 (old MCLK) |
-    #   | I2S_DIN    | GPIO24    | GPIO24 (same)     |
-    #   | I2S_IRQ    | n/a       | GPIO23 (new)      |
+    #   | I2S Signal | Rev B Pin           | Rev D Pin |
+    #   | ---------- | ------------------- | --------- |
+    #   | I2S_MCLK   | GPIO27 (rev D WS)   | GPIO25    |
+    #   | I2S_BCLK   | GPIO26 (same)       | GPIO26    |
+    #   | I2S_WS     | GPIO25 (rev D MCLK) | GPIO27    |
+    #   | I2S_DIN    | GPIO24 (same)       | GPIO24    |
     #
     # Since I'm developing this on a rev B board, the code checks an
-    # environment variable to allow for swapping the pins. IF YOU HAVE A REV C
+    # environment variable to allow for swapping the pins. IF YOU HAVE A REV D
     # OR LATER BOARD, YOU CAN IGNORE THIS. But, if you have a rev B board, you
     # need to add `FRUIT_JAM_BOARD_REV = "B"` in your CIRCUITPY/settings.toml
     # file.
-    #
+
     # 1. Reset DAC (reset is active low)
     rst = DigitalInOut(PERIPH_RESET)
     rst.direction = Direction.OUTPUT
     rst.value = False
     sleep(0.1)
     rst.value = True
-    # 2. Configure sample rate, bit depth, output port, and volume (dB below 0)
+    sleep(0.05)
+
+    # 2. Configure sample rate, bit depth, and output port
     i2c = I2C()
     dac = TLV320DAC3100(i2c)
-    dac.configure_clocks(sample_rate=44100, bit_depth=16)
+    dac.configure_clocks(sample_rate=SAMPLE_RATE, bit_depth=16)
+    dac.speaker_output = False
     dac.headphone_output = True
-    dac.dac_volume = -20
-    # 3. Initialize I2S, checking environment variable to control swapping of
-    #    the BCLK and WS from their default values (for rev C+ boards)
-    (bclk, ws) = (I2S_BCLK, I2S_WS)
+
+    # 3. Set volume for for line-level or headphone level
+    print("Initial dac_volume", dac.dac_volume)
+    print("Initial headphone_volume", dac.headphone_volume)
+    if LINE_LEVEL:
+        # This gives a line output level suitable for plugging into a mixer or
+        # the AUX input of a powered speaker (THIS IS TOO LOUD FOR HEADPHONES!)
+        dac.dac_volume = -44
+        dac.headphone_volume = -64
+    else:
+        # WARNING: This is a reasonable volume for my cheap JVC Gumy earbuds.
+        # They tend to be louder than other headpones, so probably this ought
+        # to be a safe volume level. BUT BE CAREFUL! Try it with headphones
+        # away from your ears to begin with.
+        dac.dac_volume = -64
+        dac.headphone_volume = -64
+    print("Current dac_volume", dac.dac_volume)
+    print("Current headphone_volume", dac.headphone_volume)
+
+    # 4. Initialize I2S, checking environment variable to control swapping of
+    #    the MCLK and WS from their default values (for rev C+ boards)
     if os.getenv("FRUIT_JAM_BOARD_REV") == "B":
         print("USING FRUIT JAM REV B BOARD: SWAPPING I2S PINS!")
-        (bclk, ws) = (I2S_WS, I2S_BCLK)
+        audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_MCLK, data=I2S_DIN)
     else:
         print("Using default I2S pin definitions (not a rev B board)")
-    audio = I2SOut(bit_clock=bclk, word_select=ws, data=I2S_DIN)
+        audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_WS, data=I2S_DIN)
 
     # Configure synthio patch to generate audio
-    print("TODO: CONFIGURE SYNTHIO PATCH")
+    vca = synthio.Envelope(
+        attack_time=0.001, decay_time=0.01, sustain_level=0.6,
+        release_time=0, attack_level=0.8
+    )
+    synth = synthio.Synthesizer(
+        sample_rate=SAMPLE_RATE, channel_count=1, envelope=vca
+    )
+    audio.play(synth)
 
-    # Configure onboard buttons inputs
-    b1 = DigitalInOut(BUTTON1)       # Volume down
-    b2 = DigitalInOut(BUTTON2)       # Change patch
-    b3 = DigitalInOut(BUTTON3)       # Volume up
-    b1.direction = Direction.INPUT
-    b2.direction = Direction.INPUT
-    b3.direction = Direction.INPUT
-    b1.pull = Pull.UP
-    b2.pull = Pull.UP
-    b3.pull = Pull.UP
+    # Preallocate reusable Note objects to avoid heap allocation delays later.
+    # CAUTION: I'm not sure if this is how the synthio developers meant for
+    # this to be used. I'm guessing this way is good. But, it might actually be
+    # causing a lot of extra CPU load? Not sure how to test that.
+    notes = [None] * 127
+    for i in range(21, 108+1):
+        notes[i] = synthio.Note(synthio.midi_to_hz(i))
 
     # Cache function references (MicroPython performance boost trick)
     fast_wr = sys.stdout.write
+    panic = synth.release_all
+    press = synth.press
+    release = synth.release
 
     # Main loop: scan for usb MIDI device, connect, handle input events.
     # This grabs the first MIDI device it finds. Reset board to re-scan bus.
-    prev_b1 = b1.value
-    prev_b2 = b2.value
-    prev_b3 = b3.value
     while True:
         fast_wr("USB Host: scanning bus...\n")
         gc.collect()
@@ -111,40 +146,14 @@ def main():
             # matches the class/subclass/protocol pattern for a MIDI device
             dev = MIDIInputDevice(r)
             fast_wr(" found MIDI device vid:pid %04X:%04X\n" % (r.vid, r.pid))
-            # Collect garbage to hopefully limit heap fragmentation. If we're
-            # lucky, this may help to avoid gc pauses during MIDI input loop.
+            # Collect garbage to hopefully limit heap fragmentation.
             r = None
             device_cache = {}
             gc.collect()
             # Poll for input until USB error.
             # CAUTION: This loop needs to be as efficient as possible. Any
-            # extra work here directly adds time to USB MIDI read latency.
-            # The pp_skip and cp_skip variables help with thinning out channel
-            # and polyphonic key pressure (aftertouch) messages.
-            SKIP = const(6)
-            pp_skip = SKIP
-            cp_skip = SKIP
+            # extra work here directly adds time to USB and audio latency.
             for data in dev.input_event_generator():
-
-                # Handle button presses (trigger on falling edge)
-                if not b1.value:
-                    if prev_b1:
-                        prev_b1 = False
-                        fast_wr("TODO: IMPLEMENT VOLUME DOWN\n")
-                else:
-                    prev_b1 = True
-                if not b2.value:
-                    if prev_b2:
-                        prev_b2 = False
-                        fast_wr("TODO: IMPLEMENT CHANGE PATCH\n")
-                else:
-                    prev_b2 = True
-                if not b3.value:
-                    if prev_b3:
-                        prev_b3 = False
-                        fast_wr("TODO: IMPLEMENT VOLUME UP\n")
-                else:
-                    prev_b3 = True
 
                 # Beginn handling midi packet which should be None or a 4-byte
                 # memoryview.
@@ -176,35 +185,30 @@ def main():
                 (chan, num, val) = ((data[1] & 0x0f) + 1, data[2], data[3])
                 if cin == 0x08:
                     # Note off
-                    fast_wr('Off %d %d %d\n' % (chan, num, val))
+                    if 21 <= num <= 108:
+                        release(notes[num])
+                    #fast_wr('Off %d %d %d\n' % (chan, num, val))
                 elif cin == 0x09:
                     # Note on
-                    fast_wr('On  %d %d %d\n' % (chan, num, val))
+                    if 21 <= num <= 108:
+                        press(notes[num])
+                    #fast_wr('On  %d %d %d\n' % (chan, num, val))
                 elif cin == 0x0a:
                     # Polyphonic key pressure (aftertouch)
-                    if pp_skip > 0:
-                        # Ignore some of the polyphonic pressure messages
-                        # because processing them all can destroy our latency
-                        pp_skip -= 1
-                        continue
-                    pp_skip = SKIP
-                    fast_wr('PP  %d %d %d\n' % (chan, num, val))
+                    continue  # Ignore PP
+                    #fast_wr('PP  %d %d %d\n' % (chan, num, val))
                 elif cin == 0x0b:
                     # CC (control change)
                     if num == 123 and val == 0:
                         # CC 123 = 0 means stop all notes ("all stop", "panic")
+                        panic()
                         fast_wr('PANIC %d %d %d\n' % (chan, num, val))
                     else:
                         fast_wr('CC  %d %d %d\n' % (chan, num, val))
                 elif cin == 0x0d:
                     # Channel key pressure (aftertouch)
-                    if cp_skip > 0:
-                        # Ignore some of the channel pressure messages
-                        # because processing them all can destroy our latency
-                        cp_skip -= 1
-                        continue
-                    cp_skip = SKIP
-                    fast_wr('CP  %d %d\n' % (chan, num))
+                    continue  # Ignore CP
+                    #fast_wr('CP  %d %d\n' % (chan, num))
                 elif cin == 0x0e:
                     # Pitch bend
                     fast_wr('PB  %d %d %d\n' % (chan, num, val))

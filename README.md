@@ -18,16 +18,15 @@ change got commited to CircuitPython between the 10.0.0-alpha.6 and
 
 Table of old and new I2S pins definitions:
 
-| I2S Signal | Rev B Pin | Rev C Pin         |
-| ---------- | --------- | ----------------- |
-| I2S_MCLK   | GPIO27    | GPIO25 (old WS)   |
-| I2S_BCLK   | GPIO26    | GPIO26 (same)     |
-| I2S_WS     | GPIO25    | GPIO27 (old MCLK) |
-| I2S_DIN    | GPIO24    | GPIO24 (same)     |
-| I2S_IRQ    | n/a       | GPIO23 (new)      |
+| I2S Signal | Rev B Pin           | Rev D Pin |
+| ---------- | ------------------- | --------- |
+| I2S_MCLK   | GPIO27 (rev D WS)   | GPIO25    |
+| I2S_BCLK   | GPIO26 (same)       | GPIO26    |
+| I2S_WS     | GPIO25 (rev D MCLK) | GPIO27    |
+| I2S_DIN    | GPIO24 (same)       | GPIO24    |
 
 Since I'm developing this on a rev B board, the code checks an environment
-variable to allow for swapping the pins.  If you have a rev C or later board,
+variable to allow for swapping the pins.  If you have a rev D or later board,
 you can ignore the I2S pinout change. **But, if you have a rev B board
 (pre-production prototype), you need to add** `FRUIT_JAM_BOARD_REV = "B"` **in
 your CIRCUITPY/settings.toml file**. Otherwise, the code won't have any way to
