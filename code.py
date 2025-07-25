@@ -5,8 +5,12 @@
 # - https://docs.circuitpython.org/projects/tlv320/en/latest/api.html
 # - https://learn.adafruit.com/adafruit-tlv320dac3100-i2s-dac/overview
 # - https://docs.circuitpython.org/en/latest/docs/environment.html
+# - https://docs.circuitpython.org/en/latest/shared-bindings/audiobusio/
 #
-from board import BUTTON1, BUTTON2, BUTTON3
+from audiobusio import I2SOut
+from board import (
+    BUTTON1, BUTTON2, BUTTON3, I2C, I2S_BCLK, I2S_DIN, I2S_WS, PERIPH_RESET
+)
 from digitalio import DigitalInOut, Direction, Pull
 import displayio
 import gc
@@ -17,6 +21,8 @@ import sys
 from time import sleep
 from usb.core import USBError, USBTimeoutError
 import usb_host
+
+from adafruit_tlv320 import TLV320DAC3100
 
 from sb_usb_midi import find_usb_device, MIDIInputDevice
 
@@ -29,20 +35,45 @@ def main():
     # Configure TLV320DAC3100 I2S DAC for Audio Output.
     #
     # CAUTION: The I2S pinout changed between Fruit Jam board revision B and
-    # revision C. CircuitPython 10.0.0-alpha.6 defines board.I2S_BLCK and
-    # board.I2S_MCLK using the rev B pinout. As of 10.0.0-alpha.7, the pin
-    # definitions use the new rev C pinout. Since I'm developing this on a
-    # rev B board, the code checks an environment variable to allow for
-    # swapping the pins. IF YOU HAVE A REV C OR LATER BOARD, YOU CAN IGNORE
-    # THIS. But, if you have a rev B board, you need to add
-    # `FRUIT_JAM_BOARD_REV = "B"` in your CIRCUITPY/settings.toml file.
+    # revision D. The change got commited to CircuitPython between the
+    # 10.0.0-alpha.6 and 10.0.0-alpha.7 releases (see commit 9dd53eb).
     #
+    # Table of old and new I2S pins definitions:
+    #   | I2S Signal | Rev B Pin | Rev C Pin         |
+    #   | ---------- | --------- | ----------------- |
+    #   | I2S_MCLK   | GPIO27    | GPIO25 (old WS)   |
+    #   | I2S_BCLK   | GPIO26    | GPIO26 (same)     |
+    #   | I2S_WS     | GPIO25    | GPIO27 (old MCLK) |
+    #   | I2S_DIN    | GPIO24    | GPIO24 (same)     |
+    #   | I2S_IRQ    | n/a       | GPIO23 (new)      |
+    #
+    # Since I'm developing this on a rev B board, the code checks an
+    # environment variable to allow for swapping the pins. IF YOU HAVE A REV C
+    # OR LATER BOARD, YOU CAN IGNORE THIS. But, if you have a rev B board, you
+    # need to add `FRUIT_JAM_BOARD_REV = "B"` in your CIRCUITPY/settings.toml
+    # file.
+    #
+    # 1. Reset DAC (reset is active low)
+    rst = DigitalInOut(PERIPH_RESET)
+    rst.direction = Direction.OUTPUT
+    rst.value = False
+    sleep(0.1)
+    rst.value = True
+    # 2. Configure sample rate, bit depth, output port, and volume (dB below 0)
+    i2c = I2C()
+    dac = TLV320DAC3100(i2c)
+    dac.configure_clocks(sample_rate=44100, bit_depth=16)
+    dac.headphone_output = True
+    dac.dac_volume = -20
+    # 3. Initialize I2S, checking environment variable to control swapping of
+    #    the BCLK and WS from their default values (for rev C+ boards)
+    (bclk, ws) = (I2S_BCLK, I2S_WS)
     if os.getenv("FRUIT_JAM_BOARD_REV") == "B":
         print("USING FRUIT JAM REV B BOARD: SWAPPING I2S PINS!")
+        (bclk, ws) = (I2S_WS, I2S_BCLK)
     else:
         print("Using default I2S pin definitions (not a rev B board)")
-
-    print("TODO: CONFIGURE TLV320DAC3100 I2S DAC")
+    audio = I2SOut(bit_clock=bclk, word_select=ws, data=I2S_DIN)
 
     # Configure synthio patch to generate audio
     print("TODO: CONFIGURE SYNTHIO PATCH")
