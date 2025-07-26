@@ -179,23 +179,27 @@ def main():
                 # many extra heap allocations and dictionary lookups. That
                 # stuff is slow, and we want to go _fast_.
                 #
-                (chan, num, val) = ((data[1] & 0xf) + 1, data[2], data[3])
+                chan = (data[1] & 0xf) + 1
+                num = data[2]
+                val = data[3]
                 if cin == 0x08 and (21 <= num <= 108):
                     # Note off
                     release(notes[num])
-                    if DEBUG:
-                        fast_wr('Off %d %d %d\n' % (chan, num, val))
                 elif cin == 0x09 and (21 <= num <= 108):
                     # Note on
                     press(notes[num])
-                    if DEBUG:
-                        fast_wr('On  %d %d %d\n' % (chan, num, val))
                 elif cin == 0x0b and num == 123 and val == 0:
                     # CC 123 conventionally means stop all notes ("panic")
                     panic()
                     fast_wr('PANIC %d %d %d\n' % (chan, num, val))
-                elif DEBUG:
-                    if cin == 0x0b:
+                if DEBUG:
+                    if cin == 0x08:
+                        # Note On
+                        fast_wr('Off %d %d %d\n' % (chan, num, val))
+                    elif cin == 0x09:
+                        # Note Off
+                        fast_wr('On  %d %d %d\n' % (chan, num, val))
+                    elif cin == 0x0b:
                         # CC control change
                         fast_wr('CC  %d %d %d\n' % (chan, num, val))
                     elif cin == 0x0a:
