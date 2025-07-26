@@ -7,6 +7,7 @@
 # - https://docs.circuitpython.org/en/latest/docs/environment.html
 # - https://docs.circuitpython.org/en/latest/shared-bindings/audiobusio/
 # - https://docs.circuitpython.org/en/latest/shared-bindings/audiomixer/
+# - https://midi.org/specs
 #
 from audiobusio import I2SOut
 from board import (
@@ -112,21 +113,13 @@ def main():
 
     # Configure synthio patch to generate audio
     vca = synthio.Envelope(
-        attack_time=0.001, decay_time=0.01, sustain_level=0.4,
+        attack_time=0.002, decay_time=0.01, sustain_level=0.4,
         release_time=0, attack_level=0.6
     )
     synth = synthio.Synthesizer(
         sample_rate=SAMPLE_RATE, channel_count=CHAN_COUNT, envelope=vca
     )
     audio.play(synth)
-
-    # Preallocate reusable Note objects to avoid heap allocation delays later.
-    # CAUTION: I'm not sure if this is how the synthio developers meant for
-    # this to be used. I'm guessing this way is good. But, it might actually be
-    # causing a lot of extra CPU load? Not sure how to test that.
-    notes = [None] * 127
-    for i in range(21, 108+1):
-        notes[i] = synthio.Note(synthio.midi_to_hz(i))
 
     # Cache function references (MicroPython performance boost trick)
     fast_wr = sys.stdout.write
@@ -155,8 +148,19 @@ def main():
             device_cache = {}
             gc.collect()
             # Poll for input until USB error.
+            #
             # CAUTION: This loop needs to be as efficient as possible. Any
             # extra work here directly adds time to USB and audio latency.
+            #     In my testing so far, using CircuitPython 10.0.0-beta.0, this
+            # produces stuck notes and dropped notes relatively often. I'm not
+            # sure about how it's happening, but my guess is that it has to do
+            # with interactions in the CircuitPython core between interrupts
+            # for audio and the USB stack.
+            #    If anybody feels inspired to dig into what's going on, by all
+            # means, please do! To reproduce the problem, just hook up a USB
+            # MIDI keyboard and bang away for a while. within a minute or two
+            # you should get some stuck or dropped notes.
+            #
             cin = num = val = None
             for data in dev.input_event_generator():
                 # Beginn handling midi packet which should be None or a 4-byte
@@ -173,23 +177,24 @@ def main():
                 # off, Control Change (CC), and so on.
                 #
                 cin = data[0] & 0x0f
+                chan = (data[1] & 0xf) + 1
+                num = data[2]
+                val = data[3]
 
                 # This decodes MIDI events by comparing constants against bytes
                 # from a memoryview. Using a class to do this parsing would use
                 # many extra heap allocations and dictionary lookups. That
-                # stuff is slow, and we want to go _fast_.
+                # stuff is slow, and we want to go _fast_. For details about
+                # the MIDI 1.0 standard, see https://midi.org/specs
                 #
-                chan = (data[1] & 0xf) + 1
-                num = data[2]
-                val = data[3]
                 if cin == 0x08 and (21 <= num <= 108):
                     # Note off
-                    release(notes[num])
+                    release(num)
                 elif cin == 0x09 and (21 <= num <= 108):
                     # Note on
-                    press(notes[num])
+                    press(num)
                 elif cin == 0x0b and num == 123 and val == 0:
-                    # CC 123 conventionally means stop all notes ("panic")
+                    # CC 123 means stop all notes ("panic")
                     panic()
                     fast_wr('PANIC %d %d %d\n' % (chan, num, val))
                 if DEBUG:
