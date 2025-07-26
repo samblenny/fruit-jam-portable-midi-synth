@@ -39,6 +39,10 @@ BUFFER_SIZE = const(1024)
 LINE_LEVEL  = const(True)
 #=============================================================
 
+# Change this to True if you want more MIDI output on the serial console
+DEBUG = False
+
+
 def main():
     # Turn off the default DVI display to free up CPU
     displayio.release_displays()
@@ -76,7 +80,7 @@ def main():
     i2c = I2C()
     dac = TLV320DAC3100(i2c)
     dac.configure_clocks(sample_rate=SAMPLE_RATE, bit_depth=16)
-    dac.speaker_output = False
+    dac.speaker_mute = True
     dac.headphone_output = True
 
     # 3. Set volume for for line-level or headphone level
@@ -153,69 +157,57 @@ def main():
             # Poll for input until USB error.
             # CAUTION: This loop needs to be as efficient as possible. Any
             # extra work here directly adds time to USB and audio latency.
+            cin = num = val = None
             for data in dev.input_event_generator():
-
                 # Beginn handling midi packet which should be None or a 4-byte
                 # memoryview.
-                # NOTE: The & 0x0f below is a bitwise logical operation for
-                # masking off the CN (Cable Number) bits that indicate which
-                # midi port the message arrived from. Ignoring the cable number
-                # lets us lets us merge all the midi input streams to filter
-                # more efficiently.
-                #
                 if data is None:
                     continue
+
+                # data[0] has CN (Cable Number) and CIN (Code Index Number). By
+                # discarding CN with `& 0x0f`, we ignore which virtual midi
+                # port the message arrived from. Doing that would be bad for a
+                # fancy DAW or synth setup where you needed to route MIDI
+                # among multiple devices. But, for this, ignoring CN is fine.
+                # We do need CIN though to distinguish between note on, note
+                # off, Control Change (CC), and so on.
+                #
                 cin = data[0] & 0x0f
 
-                # Filter out all System Real-Time messages. Sequencer playback
-                # commonly sends start/stop messages along with _many_ timing
-                # clocks. Dropping real-time messages conserves CPU to spend on
-                # handling note and cc messages.
-                #
-                if cin == 0x0f and (0xf8 <= data[1] <= 0xff):
-                    continue
-
                 # This decodes MIDI events by comparing constants against bytes
-                # from a memoryview. Doing it this way avoids many extra heap
-                # allocations and dictionary lookups that would happen in OOP
-                # style code with many class propery and method references. The
-                # code may be harder to read like this, but in exchange we get
-                # lower latency and fewer audio glitches.
+                # from a memoryview. Using a class to do this parsing would use
+                # many extra heap allocations and dictionary lookups. That
+                # stuff is slow, and we want to go _fast_.
                 #
-                (chan, num, val) = ((data[1] & 0x0f) + 1, data[2], data[3])
-                if cin == 0x08:
+                (chan, num, val) = ((data[1] & 0xf) + 1, data[2], data[3])
+                if cin == 0x08 and (21 <= num <= 108):
                     # Note off
-                    if 21 <= num <= 108:
-                        release(notes[num])
-                    #fast_wr('Off %d %d %d\n' % (chan, num, val))
-                elif cin == 0x09:
+                    release(notes[num])
+                    if DEBUG:
+                        fast_wr('Off %d %d %d\n' % (chan, num, val))
+                elif cin == 0x09 and (21 <= num <= 108):
                     # Note on
-                    if 21 <= num <= 108:
-                        press(notes[num])
-                    #fast_wr('On  %d %d %d\n' % (chan, num, val))
-                elif cin == 0x0a:
-                    # Polyphonic key pressure (aftertouch)
-                    continue  # Ignore PP
-                    fast_wr('PP  %d %d %d\n' % (chan, num, val))
-                elif cin == 0x0b:
-                    # CC (control change)
-                    if num == 123 and val == 0:
-                        # CC 123 = 0 means stop all notes ("all stop", "panic")
-                        panic()
-                        fast_wr('PANIC %d %d %d\n' % (chan, num, val))
-                    else:
+                    press(notes[num])
+                    if DEBUG:
+                        fast_wr('On  %d %d %d\n' % (chan, num, val))
+                elif cin == 0x0b and num == 123 and val == 0:
+                    # CC 123 conventionally means stop all notes ("panic")
+                    panic()
+                    fast_wr('PANIC %d %d %d\n' % (chan, num, val))
+                elif DEBUG:
+                    if cin == 0x0b:
+                        # CC control change
                         fast_wr('CC  %d %d %d\n' % (chan, num, val))
-                elif cin == 0x0d:
-                    # Channel key pressure (aftertouch)
-                    continue  # Ignore CP
-                    #fast_wr('CP  %d %d\n' % (chan, num))
-                elif cin == 0x0e:
-                    # Pitch bend
-                    continue  # Ignore PB
-                    #fast_wr('PB  %d %d %d\n' % (chan, num, val))
-                else:
-                    # Ignore other messages: SysEx or whatever
-                    pass
+                    elif cin == 0x0a:
+                        # MPE polyphonic key pressure (aftertouch)
+                        fast_wr('MPE %d %d %d\n' % (chan, num, val))
+                    elif cin == 0x0d:
+                        # CP channel key pressure (aftertouch)
+                        fast_wr('CP  %d %d %d\n' % (chan, num, val))
+                    elif cin == 0x0e:
+                        # PB pitch bend
+                        fast_wr('PB  %d %d %d\n' % (chan, num, val))
+                    # Ignore the rest: SysEx, System Realtime, or whatever
         except USBError as e:
             # This sometimes happens when devices are unplugged. Not always.
             print("USBError: '%s' (device unplugged?)" % e)
