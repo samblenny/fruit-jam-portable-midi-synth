@@ -8,6 +8,7 @@
 # - https://docs.circuitpython.org/en/latest/shared-bindings/audiobusio/
 # - https://docs.circuitpython.org/en/latest/shared-bindings/audiomixer/
 # - https://midi.org/specs
+# - https://github.com/todbot/circuitpython-synthio-tricks
 #
 from audiobusio import I2SOut
 from board import (
@@ -34,9 +35,10 @@ SAMPLE_RATE = const(11025)
 CHAN_COUNT  = const(2)
 BUFFER_SIZE = const(1024)
 #=============================================================
-# DANGER!!! Set this to False if you want to use heaphones!!!
+# DANGER!!! Set this to False if you want to use headphones!!!
 # When this is True, the headphone jack will send a line-level
-# output suitable use with a mixer or powered speakers.
+# output suitable use with a mixer or powered speakers, but
+# that level will be _way_ too loud for earbuds.
 LINE_LEVEL  = const(True)
 #=============================================================
 
@@ -52,7 +54,7 @@ def main():
     # Configure TLV320DAC3100 I2S DAC for Audio Output.
     #
     # CAUTION: The I2S pinout changed between Fruit Jam board revision B and
-    # revision D. The change got commited to CircuitPython between the
+    # revision D. The change got committed to CircuitPython between the
     # 10.0.0-alpha.6 and 10.0.0-alpha.7 releases (see commit 9dd53eb).
     #
     # Table of old and new I2S pins definitions:
@@ -93,22 +95,22 @@ def main():
         dac.dac_volume = -44
         dac.headphone_volume = -64
     else:
-        # WARNING: This is a reasonable volume for my cheap JVC Gumy earbuds.
-        # They tend to be louder than other headpones, so probably this ought
-        # to be a safe volume level. BUT BE CAREFUL! Try it with headphones
-        # away from your ears to begin with.
+        # This is a reasonable volume for my cheap JVC Gumy earbuds. They tend
+        # to be louder than other headphones, so probably this ought to be a
+        # generally safe volume level. For headphones that need a stronger
+        # signal, carefully increase dac_volume (closer to 0 is louder).
         dac.dac_volume = -64
         dac.headphone_volume = -64
     print("Current dac_volume", dac.dac_volume)
     print("Current headphone_volume", dac.headphone_volume)
 
     # 4. Initialize I2S, checking environment variable to control swapping of
-    #    the MCLK and WS from their default values (for rev C+ boards)
+    #    the MCLK and WS from their default values (for rev B prototype boards)
     if os.getenv("FRUIT_JAM_BOARD_REV") == "B":
         print("USING FRUIT JAM REV B BOARD: SWAPPING I2S PINS!")
         audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_MCLK, data=I2S_DIN)
     else:
-        print("Using default I2S pin definitions (not a rev B board)")
+        print("Using default I2S pin definitions (board rev D or newer)")
         audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_WS, data=I2S_DIN)
 
     # Configure synthio patch to generate audio
@@ -127,7 +129,7 @@ def main():
     press = synth.press
     release = synth.release
 
-    # Main loop: scan for usb MIDI device, connect, handle input events.
+    # Main loop: scan USB host bus for MIDI device, connect, start event loop.
     # This grabs the first MIDI device it finds. Reset board to re-scan bus.
     while True:
         fast_wr("USB Host: scanning bus...\n")
@@ -139,7 +141,7 @@ def main():
             while r is None:
                 sleep(0.4)
                 r = find_usb_device(device_cache)
-            # Use ScanResult object to check if USB device descriptor info
+            # Use ScanResult object (r) to check if USB device descriptor info
             # matches the class/subclass/protocol pattern for a MIDI device. If
             # the device doesn't match, MIDIInputDevice will raise an exception
             # and trigger another iteration through the outer while True loop.
@@ -152,7 +154,7 @@ def main():
             # MIDI Event Input Loop: Poll for input until USB error.
             #
             # CAUTION: This loop needs to be as efficient as possible. Any
-            # extra work here directly adds time to USB and audio latency.
+            # extra work here directly adds time to USB latency.
             #     As I write this on July 26, 2025, using CircuitPython
             # 10.0.0-beta.0, this code produces stuck or dropped notes
             # relatively often. I'm not sure about how it's happening, but my
@@ -172,12 +174,12 @@ def main():
 
                 # data[0] has CN (Cable Number) and CIN (Code Index Number). By
                 # discarding CN with `& 0x0f`, we ignore the virtual MIDI port
-                # that the messages arrive from. Doing that would be bad for a
+                # that the messages arrive from. Ignoring CN would be bad for a
                 # fancy DAW or synth setup where you needed to route MIDI
-                # among multiple devices. But, for this, ignoring CN is fine.
-                # We do need CIN though to distinguish between note on, note
-                # off, Control Change (CC), and so on. For channel, adding 1
-                # gives us human-friendly channel numbers in the range 1 to 16.
+                # among multiple devices. But, that doesn't matter here. We do
+                # need CIN to distinguish between note on, note off, Control
+                # Change (CC), and so on. For the channel, adding 1 gives us
+                # human-friendly channel numbers in the range of 1 to 16.
                 #
                 cin = data[0] & 0x0f
                 chan = (data[1] & 0xf) + 1
