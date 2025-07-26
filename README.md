@@ -55,10 +55,10 @@ for project bundle zip file download link).
 
 Important Configuration Notes:
 
-1. **CAUTION**: The default DAC volume level is set up for a line level output
-   to use with a mixer, powered speaker, or other device with its own volume
-   adjustment capability. To use headphones, you need to edit
-   [code.py](code.py) to set a lower value for `dac.dac_volume` (see comments
+1. The default DAC volume level is set to a safe (low) volume for earbuds. To
+   get a line level output to use with a mixer, powered speaker, or other
+   device with its own volume adjustment capability, you need to edit
+   [code.py](code.py) to set a higher value for `dac.dac_volume` (see comments
    in source code).
 
 2. To use this code with a **rev B** prototype board, you need to edit your
@@ -70,6 +70,12 @@ Important Configuration Notes:
 
    The code checks the `FRUIT_JAM_BOARD_REV` environment variable to decide if
    it can use the default I2S pinout or if it needs to swap pins.
+
+3. You could easily modify the code to work with a Metro RP2350 with a TLV320
+   DAC breakout board. To do that, you would change the `from board import ...`
+   line at the top of code.py to match the pins you want to use. Then you would
+   edit the audio initialization function do `audio = I2SOut(bit_clock=...)`
+   with the correct pinout.
 
 
 After Configuration:
