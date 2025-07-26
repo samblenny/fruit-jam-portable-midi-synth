@@ -140,41 +140,44 @@ def main():
                 sleep(0.4)
                 r = find_usb_device(device_cache)
             # Use ScanResult object to check if USB device descriptor info
-            # matches the class/subclass/protocol pattern for a MIDI device
+            # matches the class/subclass/protocol pattern for a MIDI device. If
+            # the device doesn't match, MIDIInputDevice will raise an exception
+            # and trigger another iteration through the outer while True loop.
             dev = MIDIInputDevice(r)
             fast_wr(" found MIDI device vid:pid %04X:%04X\n" % (r.vid, r.pid))
             # Collect garbage to hopefully limit heap fragmentation.
             r = None
             device_cache = {}
             gc.collect()
-            # Poll for input until USB error.
+            # MIDI Event Input Loop: Poll for input until USB error.
             #
             # CAUTION: This loop needs to be as efficient as possible. Any
             # extra work here directly adds time to USB and audio latency.
-            #     In my testing so far, using CircuitPython 10.0.0-beta.0, this
-            # produces stuck notes and dropped notes relatively often. I'm not
-            # sure about how it's happening, but my guess is that it has to do
-            # with interactions in the CircuitPython core between interrupts
-            # for audio and the USB stack.
+            #     As I write this on July 26, 2025, using CircuitPython
+            # 10.0.0-beta.0, this code produces stuck or dropped notes
+            # relatively often. I'm not sure about how it's happening, but my
+            # guess is it has to do with interactions in the CircuitPython core
+            # between interrupts for audio and the USB stack.
             #    If anybody feels inspired to dig into what's going on, by all
             # means, please do! To reproduce the problem, just hook up a USB
             # MIDI keyboard and bang away for a while. within a minute or two
             # you should get some stuck or dropped notes.
             #
-            cin = num = val = None
+            cin = chan = num = val = 0x00
             for data in dev.input_event_generator():
-                # Beginn handling midi packet which should be None or a 4-byte
+                # Begin handling midi packet which should be None or a 4-byte
                 # memoryview.
                 if data is None:
                     continue
 
                 # data[0] has CN (Cable Number) and CIN (Code Index Number). By
-                # discarding CN with `& 0x0f`, we ignore which virtual midi
-                # port the message arrived from. Doing that would be bad for a
+                # discarding CN with `& 0x0f`, we ignore the virtual MIDI port
+                # that the messages arrive from. Doing that would be bad for a
                 # fancy DAW or synth setup where you needed to route MIDI
                 # among multiple devices. But, for this, ignoring CN is fine.
                 # We do need CIN though to distinguish between note on, note
-                # off, Control Change (CC), and so on.
+                # off, Control Change (CC), and so on. For channel, adding 1
+                # gives us human-friendly channel numbers in the range 1 to 16.
                 #
                 cin = data[0] & 0x0f
                 chan = (data[1] & 0xf) + 1
@@ -182,7 +185,7 @@ def main():
                 val = data[3]
 
                 # This decodes MIDI events by comparing constants against bytes
-                # from a memoryview. Using a class to do this parsing would use
+                # from a memoryview. Using a class to do this parsing would add
                 # many extra heap allocations and dictionary lookups. That
                 # stuff is slow, and we want to go _fast_. For details about
                 # the MIDI 1.0 standard, see https://midi.org/specs
