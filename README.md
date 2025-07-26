@@ -50,7 +50,8 @@ of the Fruit Jam board becomes available in the shop.
 The code for this project is meant to be installed onto the CIRCUITPY drive of
 a Fruit Jam board by either using the `make sync` make target of this repo's
 [Makefile](Makefile) or by manually copying the project bundle files (see
-releases page for .zip attachment of project bundle).
+[releases page](https://github.com/samblenny/fruit-jam-portable-midi-synth/releases)
+for project bundle zip file download link).
 
 Important Configuration Notes:
 
