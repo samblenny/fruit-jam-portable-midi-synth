@@ -14,10 +14,10 @@ stress test of the CircuitPython USB host stack in combination with audio
 output using I2S and synthio.
 
 This code was developed and tested on CircuitPython 10.0.0-beta.0 with a
-pre-release revision B Fruit Jam prototype which uses a different I2S pinout
-from the current rev D boards. Keep in mind that what's written here may be out
-of date by the time CircuitPython 10.0.0 is released and the production
-revision of the Fruit Jam boards become available from the shop.
+pre-release rev B Fruit Jam prototype which uses a different I2S pinout from
+the current rev D boards. Keep in mind that what's written here may be out of
+date by the time CircuitPython 10.0.0 is released and the production revision
+of the Fruit Jam board becomes available in the shop.
 
 
 ## Known Issues
