@@ -2,6 +2,8 @@
 <!-- SPDX-FileCopyrightText: Copyright 2025 Sam Blenny -->
 # Fruit Jam Portable MIDI Synth
 
+![photo of portable MIDI synth setup](fruit-jam-portable-midi-synth.jpeg)
+
 This is a minimalist polyphonic square wave synth for Fruit Jam that's intended
 for portable use with a USB power bank. The only output is audio to the board's
 headphone jack. The only input is from a USB MIDI controller connected to the
@@ -123,19 +125,21 @@ caveat emptor, etc. Anyhow, in alphabetical order...
 
 ## Suitable Speakers or Headphones
 
+Currently, the code defaults to a low volume that works with earbuds. To adjust
+the volume, you can edit the code.
+
 1. I've mostly been testing with a line-level signal out of the Fruit Jam
    into a small desktop mixer to drive a pair of cheap JVC Gumy earbuds.
 
-2. It also works to plug the earbuds in directly, **BUT** you must edit the
-   code to reduce the DAC volume.
+2. It also works to plug the earbuds directly into the board.
 
-3. It also works to use a Bluetooth speaker with 3.5mm aux input jack. But,
-   watch out for speakers with silly DSP features that add lots of latency (some
-   speakers have high latency even on the aux jack, so check reviews).
+3. You could use a Bluetooth speaker with 3.5mm aux input jack. But, watch out
+   for speakers with silly DSP features that add lots of latency (some speakers
+   have high latency even on the aux jack, so check reviews).
 
 4. You could use small computer speakers that have a 3.5mm audio plug and a USB
    plug for power. For this to work, you might want a USB power bank with two
-   charging output ports.
+   charging output ports (one for speakers, one for Fruit Jam).
 
 
 ## Board Revision Note
