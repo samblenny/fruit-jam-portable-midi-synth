@@ -18,7 +18,6 @@ from digitalio import DigitalInOut, Direction, Pull
 import displayio
 import gc
 from micropython import const
-import os
 import synthio
 import sys
 from time import sleep
@@ -39,40 +38,18 @@ BUFFER_SIZE = const(1024)
 # send a line-level output suitable use with a mixer or powered
 # speakers, but that will be _way_ too loud for earbuds. For
 # finer control of volume, you can set dac.dac_volume below.
-LINE_LEVEL  = const(False)
+LINE_LEVEL  = const(True)
 #==============================================================
 
 # Change this to True if you want more MIDI output on the serial console
-DEBUG = False
+DEBUG = True
 
 
 def init_dac_audio_synth(i2c):
-    # Configure TLV320 I2S DAC for audio output and make a Synthesizer.
+    # Configure Fruit Jam rev D TLV320 I2S DAC and make a Synthesizer.
     # - i2c: a reference to board.I2C()
     # - returns tuple: (dac: TLV320DAC3100, audio: I2SOut, synth: Synthesizer)
-    #
-    # The I2S pinout changed between Fruit Jam board revision B and revision D.
-    # The change got committed to CircuitPython between the 10.0.0-alpha.6 and
-    # 10.0.0-alpha.7 releases (see commit 9dd53eb).
-    #
-    # Table of old and new I2S pins definitions:
-    #   | I2S Signal | Rev B Pin           | Rev D Pin |
-    #   | ---------- | ------------------- | --------- |
-    #   | I2S_MCLK   | GPIO27 (rev D WS)   | GPIO25    |
-    #   | I2S_BCLK   | GPIO26 (same)       | GPIO26    |
-    #   | I2S_WS     | GPIO25 (rev D MCLK) | GPIO27    |
-    #   | I2S_DIN    | GPIO24 (same)       | GPIO24    |
-    #
-    # Since I'm developing this on a rev B board, the code checks an
-    # environment variable to allow for swapping the pins. If you have a rev B
-    # board, you need to add `FRUIT_JAM_BOARD_REV = "B"` in your
-    # CIRCUITPY/settings.toml file.
-    #
-    # You could easily modify this for a Metro RP2350 with a TLV320 DAC
-    # breakout board. To do that, first change the `from board import ...` line
-    # up top to match the pins you want to use. Then change this function to
-    # have an `audio = I2SOut(bit_clock=...)` line for your pinout.
-    #
+
     # 1. Reset DAC (reset is active low)
     rst = DigitalInOut(PERIPH_RESET)
     rst.direction = Direction.OUTPUT
@@ -83,38 +60,19 @@ def init_dac_audio_synth(i2c):
     # 2. Configure sample rate, bit depth, and output port
     dac = TLV320DAC3100(i2c)
     dac.configure_clocks(sample_rate=SAMPLE_RATE, bit_depth=16)
-    dac.speaker_mute = True
+    dac.speaker_output = False
     dac.headphone_output = True
     # 3. Set volume for for line-level or headphone level
-    print("Initial dac_volume", dac.dac_volume)
-    print("Initial headphone_volume", dac.headphone_volume)
     if LINE_LEVEL:
         # This gives a line output level suitable for plugging into a mixer or
         # the AUX input of a powered speaker (THIS IS TOO LOUD FOR HEADPHONES!)
-        dac.dac_volume = -44
-        dac.headphone_volume = -64
+        dac.headphone_volume = -15.5
     else:
-        # This is a reasonable volume for my cheap JVC Gumy earbuds. They tend
-        # to be louder than other headphones, so probably this ought to be a
-        # generally safe volume level. For headphones that need a stronger
-        # signal, carefully increase dac_volume (closer to 0 is louder).
-        dac.dac_volume = -58
-        dac.headphone_volume = -64
-    print("Current dac_volume", dac.dac_volume)
-    print("Current headphone_volume", dac.headphone_volume)
-    # 4. Initialize I2S, checking environment variable to control swapping of
-    #    the MCLK and WS from their default values (for rev B prototype boards)
-    # =====
-    # To adapt this for Metro RP2350, this is where you would modify the code
-    # with an `audio = I2SOut(...)` line to match the pinout for your DAC. You
-    # would also need to change the `from board import ...` line up top.
-    # =====
-    if os.getenv("FRUIT_JAM_BOARD_REV") == "B":
-        print("USING FRUIT JAM REV B BOARD: SWAPPING I2S PINS!")
-        audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_MCLK, data=I2S_DIN)
-    else:
-        print("Using default I2S pin definitions (board rev D or newer)")
-        audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_WS, data=I2S_DIN)
+        # Use the default dac_volum & headphone_volume settings that should
+        # be suitable for low impedance headphones (earbuds, etc)
+        pass
+    # 4. Configure I2S for Fruit Jam rev D (rev B swapped WS and MCLK)
+    audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_WS, data=I2S_DIN)
     # 5. Configure synthio patch to generate audio
     vca = synthio.Envelope(
         attack_time=0.002, decay_time=0.01, sustain_level=0.4,
