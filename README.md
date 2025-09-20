@@ -15,11 +15,10 @@ rather than a USB device interface or UART MIDI. Also, this works as a good
 stress test of the CircuitPython USB host stack in combination with audio
 output using I2S and synthio.
 
-This code was developed and tested on CircuitPython 10.0.0-beta.0 with a
-pre-release rev B Fruit Jam prototype which uses a different I2S pinout from
-the current rev D boards. Keep in mind that what's written here may be out of
-date by the time CircuitPython 10.0.0 is released and the production revision
-of the Fruit Jam board becomes available in the shop.
+This code was **originally** developed on CircuitPython **10.0.0-beta.0* with a
+pre-release **rev B Fruit Jam**. But, now I've **updated** it for CircuitPython
+**10.0.0-beta.3** with the the production **rev D Fruit Jam** board (I2S WS and
+MCLK pins swapped, right channel of headphone output fixed).
 
 
 ## Known Issues
@@ -34,17 +33,6 @@ of the Fruit Jam board becomes available in the shop.
    If anybody feels inspired to dig into what's going on, please do! To
    reproduce the problem, just hook up a USB MIDI keyboard and bang away for a
    while. Within a minute or two you should get some stuck or dropped notes.
-
-2. Audio on Left Headphone Channel Only
-
-   I developed this code on a Fruit Jam rev B prototype board, so its I2S
-   pinout is different than on the latest rev D boards. On my rev B, I'm only
-   getting audio output on the left channel of my headphone jack. After
-   checking all the cabling and software level stuff I could find to check, I
-   still don't know what the problem is. So, I'm guessing there may be a
-   hardware issue with my prototype board. There's a fair chance that the code
-   is fine and it will produce stereo audio on production boards once they
-   become available from the shop.
 
 
 ## Usage
@@ -63,17 +51,7 @@ Important Configuration Notes:
    [code.py](code.py) to set a higher value for `dac.dac_volume` (see comments
    in source code).
 
-2. To use this code with a **rev B** prototype board, you need to edit your
-   `CIRCUITPY/settingings.toml` file to include the line:
-
-   ```
-   FRUIT_JAM_BOARD_REV = "B"
-   ```
-
-   The code checks the `FRUIT_JAM_BOARD_REV` environment variable to decide if
-   it can use the default I2S pinout or if it needs to swap pins.
-
-3. You could easily modify the code to work with a Metro RP2350 with a TLV320
+2. You could easily modify the code to work with a Metro RP2350 with a TLV320
    DAC breakout board. To do that, you would change the `from board import ...`
    line at the top of code.py to match the pins you want to use. Then you would
    edit the audio initialization function do `audio = I2SOut(bit_clock=...)`
@@ -96,7 +74,8 @@ After Configuration:
 Troubleshooting:
 
 If the above steps don't work for you, you can try connecting to the Fruit Jam
-board's serial console using a serial monitor program like PyCharm, Mu, tio, or screen. On the serial console, check for status or error messages. If you try
+board's serial console using a serial monitor program like PyCharm, Mu, tio, or
+screen. On the serial console, check for status or error messages. If you try
 to use a MIDI controller that requires the full 500 mA for USB 2.0, you might
 have problems. In that case, you could try a powered USB hub or a USB OTG style
 cable that splits power and data onto two different jacks.
@@ -140,27 +119,3 @@ the volume, you can edit the code.
 4. You could use small computer speakers that have a 3.5mm audio plug and a USB
    plug for power. For this to work, you might want a USB power bank with two
    charging output ports (one for speakers, one for Fruit Jam).
-
-
-## Board Revision Note
-
-The I2S pinout changed between Fruit Jam board revision B and revision D. The
-change got committed to CircuitPython between the 10.0.0-alpha.6 and
-10.0.0-alpha.7 releases (see circuitpython
-[commit 9dd53eb](https://github.com/adafruit/circuitpython/commit/9dd53eb6c34994dc7ef7e2a4f21dfd7c7d8dbbd9)).
-
-Table of old and new I2S pins definitions:
-
-| I2S Signal | Rev B Pin           | Rev D Pin |
-| ---------- | ------------------- | --------- |
-| I2S_MCLK   | GPIO27 (rev D WS)   | GPIO25    |
-| I2S_BCLK   | GPIO26 (same)       | GPIO26    |
-| I2S_WS     | GPIO25 (rev D MCLK) | GPIO27    |
-| I2S_DIN    | GPIO24 (same)       | GPIO24    |
-
-Since I'm developing this on a rev B board, the code checks an environment
-variable to allow for swapping the pins.  If you have a rev D or later board,
-you can ignore the I2S pinout change. **But, if you have a rev B board
-(pre-production prototype), you need to add** `FRUIT_JAM_BOARD_REV = "B"` **in
-your CIRCUITPY/settings.toml file**. Otherwise, the code won't have any way to
-detect that it needs to swap the I2S pins.
