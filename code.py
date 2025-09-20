@@ -38,7 +38,7 @@ BUFFER_SIZE = const(1024)
 # send a line-level output suitable use with a mixer or powered
 # speakers, but that will be _way_ too loud for earbuds. For
 # finer control of volume, you can set dac.dac_volume below.
-LINE_LEVEL  = const(True)
+LINE_LEVEL  = const(False)
 #==============================================================
 
 # Change this to True if you want more MIDI output on the serial console
